@@ -20,10 +20,12 @@ Keyboard and mouse must both be on this machine while the installer runs:
 ./mx-setup.sh --dry-run --prefix /tmp/mx   # inspect: writes only under /tmp/mx
 ./mx-setup.sh                              # follow to every other paired slot
 ./mx-setup.sh --target OTHER-MACHINE-NAME  # or: only to the named slot(s); repeatable
+./mx-setup.sh --mouse-only                 # no MX keyboard: only mx-push-mouse, mouse needed
 ```
 
 Every computer in the rotation needs its own linking: this setup on Linux, Logi Options+ on
 Windows or macOS. The computer the keyboard *leaves* is the one that moves the mouse.
 
 `mx-push-mouse <slot>` also works on its own, so a non-Logitech keyboard can drive it. The
-`keychron-host-announce` project does that for a Keychron V6 Max (guide, section 12).
+`keychron-host-announce` project does that for a Keychron V6 Max (guide, section 12). For that,
+`--mouse-only` installs `mx-push-mouse` without needing an MX keyboard.

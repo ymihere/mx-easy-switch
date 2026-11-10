@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 # Install MX Easy-Switch linking helpers. See docs/setup.md for the why.
 #
-#   ./mx-setup.sh [--target NAME]... [--dry-run] [--prefix DIR]
+#   ./mx-setup.sh [--target NAME]... [--mouse-only] [--dry-run] [--prefix DIR]
 #
 # Run it with the keyboard and mouse both on THIS machine.
+# --mouse-only  only the mouse is needed: install mx-discover and mx-push-mouse,
+#            nothing else (no Solaar rules, no keeper, no Solaar restart). For a
+#            machine where another keyboard (e.g. keychron-host-announce) drives it.
 # By default the mouse is made to follow the keyboard to EVERY other paired
 # slot. --target NAME (repeatable) limits that to the named slots; NAME is the
 # host name as stored in the devices (the name= field from mx-discover).
@@ -12,15 +15,17 @@
 set -euo pipefail
 
 TARGETS=()
+MOUSE_ONLY=0
 DRY_RUN=0
 PREFIX="$HOME"
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --target)  TARGETS+=("$2"); shift 2 ;;
+    --mouse-only) MOUSE_ONLY=1; shift ;;
     --dry-run) DRY_RUN=1; shift ;;
     --prefix)  PREFIX="$2"; shift 2 ;;
-    -h|--help) sed -n '2,12p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,15p' "$0"; exit 0 ;;
     *) echo "unknown argument: $1" >&2; exit 2 ;;
   esac
 done
@@ -152,7 +157,7 @@ echo "wrote $BIN/mx-discover"
 # ------------------------------------------------- discover devices and slots
 echo
 echo "Discovering devices ..."
-eval "$(python3 - "${TARGETS[@]}" <<'PY'
+eval "$(MX_MOUSE_ONLY=$MOUSE_ONLY python3 - "${TARGETS[@]}" <<'PY'
 import os, sys
 try:
     from logitech_receiver import base
@@ -167,6 +172,7 @@ from logitech_receiver import hidpp20 as h20
 from logitech_receiver.hidpp20 import FEATURE
 
 wanted = sys.argv[1:]
+mouse_only = os.environ.get('MX_MOUSE_ONLY') == '1'
 
 
 def host_table(dev):
@@ -211,7 +217,7 @@ def all_devices():
             continue
 
 
-kb = mouse = current = None
+kb = mouse = current = mouse_current = None
 table = {}
 via_receiver = False
 for dev in all_devices():
@@ -226,6 +232,7 @@ for dev in all_devices():
         via_receiver |= dev.receiver is not None
     elif kind == 'mouse' and mouse is None:
         mouse = dev.unitId or dev.serial
+        mouse_current, mouse_table = host_table(dev)
         via_receiver |= dev.receiver is not None
 
 
@@ -235,9 +242,25 @@ def fail(msg):
     sys.exit(0)
 
 
+if mouse_only:
+    if not mouse:
+        fail('need the mouse online on this machine. Put it on this machine\'s channel,\n'
+             '       move it, and retry.')
+    if mouse_current is None:
+        fail('the mouse did not report its host table (HOSTS INFO 0x1815).')
+    names = {i: (name or 'slot %d' % (i + 1)) for i, (status, name) in mouse_table.items()}
+    print('KEYBOARD_ID=')
+    print('MOUSE_ID=%s' % mouse)
+    print('SELF_INDEX=%d' % mouse_current)
+    print('VIA_RECEIVER=%d' % via_receiver)
+    print('TARGET_INDICES=""')
+    print('HOST_NAMES_PY="%s"' % repr(names).replace('"', ''))
+    sys.exit(0)
+
 if not kb or not mouse:
     fail('need one keyboard and one mouse online on this machine.\n'
-         '       Put both on this machine\'s channel, move the mouse, and retry.')
+         '       Put both on this machine\'s channel, move the mouse, and retry.\n'
+         '       No MX keyboard here? --mouse-only installs just mx-push-mouse.')
 if current is None:
     fail('the keyboard did not report its host table (HOSTS INFO 0x1815).')
 
@@ -266,7 +289,7 @@ for t in targets:
 PY
 )"
 
-echo "  keyboard unit ID : $KEYBOARD_ID"
+[ "$MOUSE_ONLY" = 1 ] || echo "  keyboard unit ID : $KEYBOARD_ID"
 echo "  mouse unit ID    : $MOUSE_ID"
 echo "  this machine     : host index $SELF_INDEX (key labelled $((SELF_INDEX + 1)))"
 echo "  connected via    : $([ "$VIA_RECEIVER" = 1 ] && echo receiver || echo 'Bluetooth only')"
@@ -422,6 +445,16 @@ open(path, 'w').write(s)
 PY
 chmod +x "$BIN/mx-push-mouse"
 echo "wrote $BIN/mx-push-mouse"
+
+if [ "$MOUSE_ONLY" = 1 ]; then
+  cat <<DONE_MOUSE
+
+Done (mouse only). Slot names: $HOST_NAMES_PY
+Test it: "mx-push-mouse N" sends the mouse to slot N+1 (0-based), and
+"mx-push-mouse $SELF_INDEX" brings it back here. Log: ~/.cache/mx-push-mouse.log
+DONE_MOUSE
+  exit 0
+fi
 
 # --------------------------------------------------------- mx-hostname-keeper
 cat > "$BIN/mx-hostname-keeper" <<'KEEPER_EOF'

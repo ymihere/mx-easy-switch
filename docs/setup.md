@@ -383,9 +383,10 @@ chmod +x mx-setup.sh
 ./mx-setup.sh --dry-run --prefix /tmp/mx   # inspect: writes only under /tmp/mx
 ./mx-setup.sh                              # do it: follow to every other paired slot
 ./mx-setup.sh --target linux-a             # or: only to the named slot(s); repeatable
+./mx-setup.sh --mouse-only                 # no MX keyboard here: only mx-push-mouse (below)
 ```
 
-Keyboard and mouse must both be on this machine while it runs. It reads the keyboard's host
+Keyboard and mouse must both be on this machine while it runs (except with `--mouse-only`). It reads the keyboard's host
 table: the **current** slot is this machine, and every other slot with `status=1` becomes a
 target. `--target` takes the host name **as stored in the devices** (the `name=` field from
 `mx-discover`), which is not necessarily the machine's real hostname.
@@ -413,12 +414,12 @@ Two fixes came out of the Bluetooth run:
 It does not pair devices and does not touch the other machines. **Re-run it whenever a slot is
 paired or re-paired**, or the new slot has no rule (fault 6).
 
-**Updating only `mx-push-mouse`.** The full installer needs the MX keyboard on this machine and
-restarts Solaar. If only `mx-push-mouse` changed (as with the fault 9 retry), you can instead
-take its heredoc from `mx-setup.sh` (between `<<'PUSH_EOF'` and `PUSH_EOF`), replace
-`@MOUSE_ID@` and `@HOST_NAMES@` with the values in your installed copy, and install it over
-`~/.local/bin/mx-push-mouse`. Diff against the old file first: the only differences should be
-the code changes.
+**`--mouse-only`: only `mx-push-mouse`** (added 2026-11-10). Needs only the mouse on this
+machine. It reads the slot names from the mouse's own host table, writes `mx-discover` and
+`mx-push-mouse`, and stops there: no Solaar rules, no keeper, no Solaar config change, no Solaar
+restart. Use it on a machine where another keyboard drives the push (section 12), or to update
+`mx-push-mouse` (as with the fault 9 retry) without the MX keyboard. It overwrites
+`~/.local/bin/mx-push-mouse`; Solaar rules from an earlier full install keep calling it.
 
 After it finishes: **restart Solaar**, then test. Press each target's channel key, bring both
 devices back by hand (the target machine may not be set up yet), and watch
@@ -609,3 +610,6 @@ it is leaving where it goes can drive it from a desktop shortcut instead of a So
 leaving, the keyboard sends Ctrl+Alt+Shift+F13/F14/F15, and a Cinnamon shortcut runs
 `mx-push-mouse 0/1/2`. Solaar rules for an MX keyboard can stay installed alongside and do no
 harm.
+
+On a machine without the MX keyboard, `./mx-setup.sh --mouse-only` installs just
+`mx-push-mouse` (section 7).
